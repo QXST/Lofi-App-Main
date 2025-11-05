@@ -45,6 +45,7 @@ struct ContentView: View {
                     Color.clear.frame(height: 72)
                 }
             }
+            .zIndex(0)
 
             // Mini player overlay
             if playerViewModel.currentTrack != nil {
@@ -53,6 +54,7 @@ struct ContentView: View {
                     MiniPlayerView(viewModel: playerViewModel, showFullPlayer: $showFullPlayer)
                         .transition(.move(edge: .bottom))
                 }
+                .zIndex(1)
             }
         }
         .fullScreenCover(isPresented: $showFullPlayer) {
