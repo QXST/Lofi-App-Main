@@ -42,7 +42,7 @@ struct ContentView: View {
             .accentColor(Color(red: 0.5, green: 0.6, blue: 1.0))
             .safeAreaInset(edge: .bottom) {
                 if playerViewModel.currentTrack != nil {
-                    Color.clear.frame(height: 72)
+                    Color.clear.frame(height: 60)
                 }
             }
             .zIndex(0)
@@ -52,6 +52,7 @@ struct ContentView: View {
                 VStack {
                     Spacer()
                     MiniPlayerView(viewModel: playerViewModel, showFullPlayer: $showFullPlayer)
+                        .padding(.bottom, 55)
                         .transition(.move(edge: .bottom))
                 }
                 .zIndex(1)
