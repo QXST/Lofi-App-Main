@@ -15,40 +15,46 @@ struct ContentView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
+                QuickPlayView(playerViewModel: playerViewModel)
+                    .tabItem {
+                        Label("Quick Play", systemImage: "play.circle.fill")
+                    }
+                    .tag(0)
+
                 HomeView(viewModel: playerViewModel)
                     .tabItem {
                         Label("Radio", systemImage: "headphones")
                     }
-                    .tag(0)
+                    .tag(1)
 
                 FavoritesView()
                     .tabItem {
                         Label("Favorites", systemImage: "heart.fill")
                     }
-                    .tag(1)
-
-                CommunityView()
-                    .tabItem {
-                        Label("Lo-fi Clouds", systemImage: "cloud.fill")
-                    }
                     .tag(2)
+
+                FocusView()
+                    .tabItem {
+                        Label("Focus", systemImage: "timer")
+                    }
+                    .tag(3)
 
                 SettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gearshape.fill")
                     }
-                    .tag(3)
+                    .tag(4)
             }
             .accentColor(Color(red: 0.5, green: 0.6, blue: 1.0))
             .safeAreaInset(edge: .bottom) {
-                if playerViewModel.currentTrack != nil {
+                if playerViewModel.currentTrack != nil && selectedTab != 0 {
                     Color.clear.frame(height: 60)
                 }
             }
             .zIndex(0)
 
-            // Mini player overlay
-            if playerViewModel.currentTrack != nil {
+            // Mini player overlay (hide on Quick Play tab)
+            if playerViewModel.currentTrack != nil && selectedTab != 0 {
                 VStack {
                     Spacer()
                     MiniPlayerView(viewModel: playerViewModel, showFullPlayer: $showFullPlayer)
@@ -108,12 +114,9 @@ struct HomeView: View {
                             .padding(.top, AppTheme.Spacing.xxl)
                         }
 
-                        // Quick Focus Access
-                        FocusQuickAccess(
-                            timerManager: timerManager,
-                            showTimer: $showTimer
-                        )
-                        .padding(.horizontal, AppTheme.Spacing.lg)
+                        // Music Channels
+                        ChannelsQuickAccess(playerViewModel: viewModel)
+                            .padding(.horizontal, AppTheme.Spacing.lg)
 
                         // Segmented control
                         SegmentedControlView(
@@ -800,6 +803,20 @@ struct SettingsView: View {
                         }
                     } header: {
                         Text("Subscription")
+                    }
+
+                    // Community Section
+                    Section {
+                        NavigationLink(destination: CommunityView()) {
+                            HStack {
+                                Image(systemName: "cloud.fill")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Community & News")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                    } header: {
+                        Text("Community")
                     }
 
                     // Appearance Section
