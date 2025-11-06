@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct Lofi_App_MainApp: App {
+    init() {
+        // Initialize SessionManager on app launch
+        _ = SessionManager.shared
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }

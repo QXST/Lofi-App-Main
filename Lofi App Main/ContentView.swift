@@ -258,6 +258,9 @@ struct TrackRow: View {
     let isPlaying: Bool
     let isCurrent: Bool
     @State private var isPressed = false
+    @StateObject private var favoritesManager = FavoritesManager.shared
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    @State private var showPaywall = false
 
     var body: some View {
         HStack(spacing: AppTheme.Spacing.md) {
@@ -287,6 +290,14 @@ struct TrackRow: View {
 
             Spacer()
 
+            // Favorite button
+            Button(action: toggleFavorite) {
+                Image(systemName: favoritesManager.isFavorite(trackId: track.id.uuidString) ? "heart.fill" : "heart")
+                    .font(.system(size: 20))
+                    .foregroundColor(favoritesManager.isFavorite(trackId: track.id.uuidString) ? .red : AppTheme.Colors.textSecondary)
+            }
+            .buttonStyle(.plain)
+
             // Playing indicator
             if isPlaying {
                 Image(systemName: "waveform")
@@ -307,33 +318,200 @@ struct TrackRow: View {
         .scaleEffect(isPressed ? 0.97 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPlaying)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+
+    private func toggleFavorite() {
+        let success = favoritesManager.toggleFavorite(track: track)
+        if !success && !favoritesManager.canAddMore {
+            // Show paywall if limit reached
+            showPaywall = true
+        }
     }
 }
 
 // MARK: - Favorites View
 struct FavoritesView: View {
+    @StateObject private var favoritesManager = FavoritesManager.shared
+    @StateObject private var playerViewModel = PlayerViewModel()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    @State private var showPaywall = false
+
     var body: some View {
         NavigationView {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.15, green: 0.15, blue: 0.2),
-                        Color(red: 0.1, green: 0.1, blue: 0.15)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                AppTheme.Gradients.background
+                    .ignoresSafeArea()
 
-                VStack(spacing: 16) {
-                    Text("You have no favorites yet.")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white.opacity(0.6))
+                if favoritesManager.favoriteTracks.isEmpty {
+                    // Empty State
+                    VStack(spacing: 24) {
+                        Image(systemName: "heart.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(AppTheme.Colors.textTertiary)
+
+                        VStack(spacing: 12) {
+                            Text("No favorites yet")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(AppTheme.Colors.textPrimary)
+
+                            Text("Tap the heart icon on tracks you love to add them here")
+                                .font(.system(size: 16))
+                                .foregroundColor(AppTheme.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                        }
+                    }
+                } else {
+                    // Favorites List
+                    ScrollView {
+                        VStack(spacing: 20) {
+                            // Header with count
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(favoritesManager.count) Favorites")
+                                        .font(.system(size: 20, weight: .bold))
+                                        .foregroundColor(AppTheme.Colors.textPrimary)
+
+                                    if let remaining = favoritesManager.remainingFavorites {
+                                        Text("\(remaining) slots remaining")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(AppTheme.Colors.textSecondary)
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "infinity")
+                                                .font(.system(size: 12))
+                                            Text("Unlimited")
+                                                .font(.system(size: 14))
+                                        }
+                                        .foregroundColor(.green)
+                                    }
+                                }
+
+                                Spacer()
+
+                                if !subscriptionManager.isPremium {
+                                    Button(action: { showPaywall = true }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "crown.fill")
+                                            Text("Upgrade")
+                                        }
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            LinearGradient(
+                                                colors: [AppTheme.Colors.primary, AppTheme.Colors.secondary],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, AppTheme.Spacing.lg)
+                            .padding(.top, AppTheme.Spacing.md)
+
+                            // Favorites Grid
+                            LazyVStack(spacing: AppTheme.Spacing.md) {
+                                ForEach(favoritesManager.favoriteTracks) { track in
+                                    FavoriteTrackRow(
+                                        track: track,
+                                        isPlaying: playerViewModel.currentTrack?.id == track.id && playerViewModel.isPlaying,
+                                        isCurrent: playerViewModel.currentTrack?.id == track.id,
+                                        onTap: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                playerViewModel.playTrack(track)
+                                            }
+                                        },
+                                        onRemove: {
+                                            withAnimation {
+                                                favoritesManager.removeFavorite(trackId: track.id.uuidString)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, AppTheme.Spacing.lg)
+                            .padding(.bottom, 120)
+                        }
+                    }
                 }
             }
             .navigationTitle("Favorites")
             .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
         }
+    }
+}
+
+// MARK: - Favorite Track Row
+struct FavoriteTrackRow: View {
+    let track: Track
+    let isPlaying: Bool
+    let isCurrent: Bool
+    let onTap: () -> Void
+    let onRemove: () -> Void
+
+    @State private var isPressed = false
+
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.md) {
+            // Album art
+            AsyncImage(url: track.albumArtURL.flatMap { URL(string: $0) }) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                CloudPlaceholderView()
+            }
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.CornerRadius.small))
+
+            // Track info
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                Text(track.title)
+                    .font(AppTheme.Typography.body(weight: .semibold))
+                    .foregroundColor(isCurrent ? AppTheme.Colors.primary : AppTheme.Colors.textPrimary)
+                    .lineLimit(1)
+
+                Text(track.artist)
+                    .font(AppTheme.Typography.callout())
+                    .foregroundColor(AppTheme.Colors.textSecondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Playing indicator or heart
+            if isPlaying {
+                Image(systemName: "waveform")
+                    .font(.system(size: 20))
+                    .foregroundColor(AppTheme.Colors.primary)
+                    .symbolEffect(.variableColor.iterative)
+            } else {
+                Button(action: onRemove) {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(AppTheme.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                .fill(isCurrent ? AppTheme.Colors.cardMedium : AppTheme.Colors.cardLight)
+        )
+        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+        .onTapGesture(perform: onTap)
     }
 }
 
@@ -511,7 +689,19 @@ struct SocialLinkButton: View {
 
 // MARK: - Settings View
 struct SettingsView: View {
-    @AppStorage("isDarkMode") private var isDarkMode = true
+    @StateObject private var sessionManager = SessionManager.shared
+    @StateObject private var themeManager = ThemeManager.shared
+    @AppStorage("audioQuality") private var audioQuality = "medium"
+    @AppStorage("crossfadeDuration") private var crossfadeDuration = 5.0
+    @AppStorage("gaplessPlayback") private var gaplessPlayback = true
+
+    @AppStorage("notif_newMusic") private var notifNewMusic = true
+    @AppStorage("notif_community") private var notifCommunity = true
+    @AppStorage("notif_weeklyStats") private var notifWeeklyStats = true
+
+    @State private var showProfile = false
+    @State private var showPaywall = false
+    @State private var showFeedback = false
 
     var body: some View {
         NavigationView {
@@ -520,9 +710,102 @@ struct SettingsView: View {
                     .ignoresSafeArea()
 
                 List {
+                    // Account Section
+                    if let user = sessionManager.currentUser, !user.isGuest {
+                        Section {
+                            Button(action: { showProfile = true }) {
+                                HStack(spacing: 16) {
+                                    // Avatar
+                                    Circle()
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [AppTheme.Colors.primary, AppTheme.Colors.secondary],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            )
+                                        )
+                                        .frame(width: 50, height: 50)
+                                        .overlay(
+                                            Text(user.initials)
+                                                .font(.system(size: 18, weight: .bold))
+                                                .foregroundColor(.white)
+                                        )
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(user.displayUsername)
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(AppTheme.Colors.textPrimary)
+
+                                        Text(user.email)
+                                            .font(.system(size: 14))
+                                            .foregroundColor(AppTheme.Colors.textSecondary)
+                                    }
+
+                                    Spacer()
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(AppTheme.Colors.textTertiary)
+                                }
+                            }
+                        } header: {
+                            Text("Account")
+                        }
+                    }
+
+                    // Subscription Section
                     Section {
-                        Toggle(isOn: $isDarkMode) {
-                            HStack(spacing: AppTheme.Spacing.md) {
+                        if sessionManager.isPremium {
+                            HStack {
+                                Image(systemName: "crown.fill")
+                                    .foregroundColor(.yellow)
+                                Text("Premium Member")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                                Spacer()
+                                Text("Active")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.green)
+                            }
+
+                            Button(action: {}) {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .foregroundColor(AppTheme.Colors.primary)
+                                    Text("Manage Subscription")
+                                        .foregroundColor(AppTheme.Colors.textPrimary)
+                                }
+                            }
+                        } else {
+                            Button(action: { showPaywall = true }) {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                        .foregroundColor(AppTheme.Colors.primary)
+                                    Text("Upgrade to Premium")
+                                        .foregroundColor(AppTheme.Colors.textPrimary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(AppTheme.Colors.textTertiary)
+                                }
+                            }
+                        }
+
+                        Button(action: {}) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Restore Purchases")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                    } header: {
+                        Text("Subscription")
+                    }
+
+                    // Appearance Section
+                    Section {
+                        Toggle(isOn: $themeManager.isDarkMode) {
+                            HStack(spacing: 12) {
                                 Image(systemName: "moon.fill")
                                     .foregroundColor(AppTheme.Colors.primary)
                                 Text("Dark Mode")
@@ -530,32 +813,219 @@ struct SettingsView: View {
                             }
                         }
                         .tint(AppTheme.Colors.primary)
+
+                        HStack {
+                            Image(systemName: "paintbrush.fill")
+                                .foregroundColor(AppTheme.Colors.primary)
+                            Text("Theme")
+                                .foregroundColor(AppTheme.Colors.textPrimary)
+                            Spacer()
+                            Text("Cloud Blue")
+                                .foregroundColor(AppTheme.Colors.textSecondary)
+                            if !sessionManager.isPremium {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.textTertiary)
+                            }
+                        }
+                    } header: {
+                        Text("Appearance")
                     }
 
+                    // Audio & Playback Section
+                    Section {
+                        HStack {
+                            Image(systemName: "hifispeaker.fill")
+                                .foregroundColor(AppTheme.Colors.primary)
+                            Text("Audio Quality")
+                                .foregroundColor(AppTheme.Colors.textPrimary)
+                            Spacer()
+                            Text(audioQuality.capitalized)
+                                .foregroundColor(AppTheme.Colors.textSecondary)
+                            if audioQuality == "high" && !sessionManager.isPremium {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.textTertiary)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "waveform")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Crossfade")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                                Spacer()
+                                Text("\(Int(crossfadeDuration))s")
+                                    .foregroundColor(AppTheme.Colors.textSecondary)
+                            }
+                            Slider(value: $crossfadeDuration, in: 0...10, step: 1)
+                                .tint(AppTheme.Colors.primary)
+                        }
+
+                        Toggle(isOn: $gaplessPlayback) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "music.note.list")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Gapless Playback")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                        .tint(AppTheme.Colors.primary)
+                    } header: {
+                        Text("Audio & Playback")
+                    }
+
+                    // Notifications Section
+                    Section {
+                        Toggle(isOn: $notifNewMusic) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "music.note")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("New Music")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                        .tint(AppTheme.Colors.primary)
+
+                        Toggle(isOn: $notifCommunity) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.3.fill")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Community Updates")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                        .tint(AppTheme.Colors.primary)
+
+                        Toggle(isOn: $notifWeeklyStats) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "chart.bar.fill")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Weekly Stats")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                        .tint(AppTheme.Colors.primary)
+                    } header: {
+                        Text("Notifications")
+                    }
+
+                    // Privacy & Data Section
                     Section {
                         Button(action: {}) {
-                            HStack(spacing: AppTheme.Spacing.md) {
-                                Image(systemName: "square.and.arrow.up")
+                            HStack {
+                                Image(systemName: "trash")
                                     .foregroundColor(AppTheme.Colors.primary)
-                                Text("Sharing is caring")
+                                Text("Clear Cache")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                                Spacer()
+                                Text("127 MB")
+                                    .foregroundColor(AppTheme.Colors.textTertiary)
+                            }
+                        }
+
+                        Button(action: {}) {
+                            HStack {
+                                Image(systemName: "doc.text")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Download My Data")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                    } header: {
+                        Text("Privacy & Data")
+                    }
+
+                    // Feedback & Support Section
+                    Section {
+                        Button(action: { showFeedback = true }) {
+                            HStack {
+                                Image(systemName: "envelope.fill")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Send Feedback")
                                     .foregroundColor(AppTheme.Colors.textPrimary)
                             }
                         }
 
                         Button(action: {}) {
-                            HStack(spacing: AppTheme.Spacing.md) {
-                                Image(systemName: "chart.line.uptrend.xyaxis")
+                            HStack {
+                                Image(systemName: "star.fill")
                                     .foregroundColor(AppTheme.Colors.primary)
-                                Text("Help us Grow")
+                                Text("Rate on App Store")
                                     .foregroundColor(AppTheme.Colors.textPrimary)
                             }
                         }
+
+                        Button(action: {}) {
+                            HStack {
+                                Image(systemName: "questionmark.circle")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Contact Support")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+
+                        Button(action: {}) {
+                            HStack {
+                                Image(systemName: "ant.fill")
+                                    .foregroundColor(AppTheme.Colors.primary)
+                                Text("Report a Bug")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                    } header: {
+                        Text("Feedback & Support")
+                    }
+
+                    // About Section
+                    Section {
+                        HStack {
+                            Text("Version")
+                                .foregroundColor(AppTheme.Colors.textPrimary)
+                            Spacer()
+                            Text("1.0.0")
+                                .foregroundColor(AppTheme.Colors.textTertiary)
+                        }
+
+                        Button(action: {}) {
+                            HStack {
+                                Text("Terms of Service")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.textTertiary)
+                            }
+                        }
+
+                        Button(action: {}) {
+                            HStack {
+                                Text("Privacy Policy")
+                                    .foregroundColor(AppTheme.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppTheme.Colors.textTertiary)
+                            }
+                        }
+                    } header: {
+                        Text("About")
                     }
                 }
                 .scrollContentBackground(.hidden)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .sheet(isPresented: $showProfile) {
+                ProfileView()
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
+            .sheet(isPresented: $showFeedback) {
+                FeedbackView()
+            }
         }
     }
 }

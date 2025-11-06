@@ -10,34 +10,83 @@ import SwiftUI
 struct AppTheme {
     // MARK: - Colors
     struct Colors {
-        // Primary brand colors
+        // Primary brand colors (same in both themes)
         static let primary = Color(red: 0.5, green: 0.6, blue: 1.0)
+        static let secondary = Color(red: 0.7, green: 0.5, blue: 1.0) // Purple accent
         static let primaryDark = Color(red: 0.4, green: 0.5, blue: 0.9)
 
-        // Background gradients
+        // Dynamic background gradients
+        static func backgroundTop(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color(red: 0.15, green: 0.15, blue: 0.2)
+                : Color(red: 0.95, green: 0.96, blue: 0.98)
+        }
+
+        static func backgroundBottom(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color(red: 0.1, green: 0.1, blue: 0.15)
+                : Color(red: 0.88, green: 0.90, blue: 0.95)
+        }
+
+        // Dynamic card backgrounds
+        static func cardLight(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color.white.opacity(0.05)
+                : Color.white.opacity(0.8)
+        }
+
+        static func cardMedium(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color.white.opacity(0.1)
+                : Color.white.opacity(0.9)
+        }
+
+        static func cardDark(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color.white.opacity(0.15)
+                : Color.white
+        }
+
+        // Dynamic text colors
+        static func textPrimary(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark ? Color.white : Color.black
+        }
+
+        static func textSecondary(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color.white.opacity(0.7)
+                : Color.black.opacity(0.7)
+        }
+
+        static func textTertiary(for colorScheme: ColorScheme) -> Color {
+            colorScheme == .dark
+                ? Color.white.opacity(0.5)
+                : Color.black.opacity(0.5)
+        }
+
+        // Cloud theme (same in both)
+        static let cloudGradientStart = Color(red: 0.5, green: 0.6, blue: 1.0)
+        static let cloudGradientEnd = Color(red: 0.4, green: 0.5, blue: 0.9)
+
+        // Deprecated static properties (for backward compatibility during migration)
         static let backgroundTop = Color(red: 0.15, green: 0.15, blue: 0.2)
         static let backgroundBottom = Color(red: 0.1, green: 0.1, blue: 0.15)
-
-        // Card backgrounds
         static let cardLight = Color.white.opacity(0.05)
         static let cardMedium = Color.white.opacity(0.1)
         static let cardDark = Color.white.opacity(0.15)
-
-        // Text colors
         static let textPrimary = Color.white
         static let textSecondary = Color.white.opacity(0.7)
         static let textTertiary = Color.white.opacity(0.5)
-
-        // Cloud theme
-        static let cloudGradientStart = Color(red: 0.5, green: 0.6, blue: 1.0)
-        static let cloudGradientEnd = Color(red: 0.4, green: 0.5, blue: 0.9)
     }
 
     // MARK: - Gradients
     struct Gradients {
-        static var background: LinearGradient {
+        static func background(for colorScheme: ColorScheme) -> LinearGradient {
             LinearGradient(
-                colors: [Colors.backgroundTop, Colors.backgroundBottom],
+                colors: [
+                    Colors.backgroundTop(for: colorScheme),
+                    Colors.backgroundBottom(for: colorScheme)
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -56,6 +105,15 @@ struct AppTheme {
                 colors: [Colors.primary, Colors.primaryDark],
                 startPoint: .leading,
                 endPoint: .trailing
+            )
+        }
+
+        // Deprecated static property (for backward compatibility)
+        static var background: LinearGradient {
+            LinearGradient(
+                colors: [Colors.backgroundTop, Colors.backgroundBottom],
+                startPoint: .top,
+                endPoint: .bottom
             )
         }
     }
@@ -122,6 +180,23 @@ struct AppTheme {
 
 // MARK: - View Extensions
 extension View {
+    func cardStyle(for colorScheme: ColorScheme) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                    .fill(AppTheme.Colors.cardLight(for: colorScheme))
+            )
+    }
+
+    func cardStyleActive(for colorScheme: ColorScheme) -> some View {
+        self
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.CornerRadius.medium)
+                    .fill(AppTheme.Colors.cardMedium(for: colorScheme))
+            )
+    }
+
+    // Deprecated methods (for backward compatibility)
     func cardStyle() -> some View {
         self
             .background(
